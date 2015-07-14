@@ -3,6 +3,7 @@ package br.com.itarocha.importadorjdbc;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -74,23 +75,24 @@ public class Main {
 	 * @param tables
 	 * @throws SQLException
 	 */
-	public static void getColumnsMetadata(ArrayList<String> tables)
+	public static void buildMetadata(ArrayList<String> tables)
 			throws SQLException, IOException {
 		
-		BufferedWriter bf = new BufferedWriter(new FileWriter("c:\\temp\\metadata.txt"));
+		BufferedWriter bf = new BufferedWriter(new FileWriter("c:\\temp\\metadata.sql"));
 		
 		ResultSet rs = null;
 		// Print the columns properties of the actual table
 		Statement st = connection.createStatement();
 		st = connection.createStatement();
 		for (String actualTable : tables) {
+			System.out.println(String.format("gerando metadata da tabela \"%s\"",actualTable));
 			rs = st.executeQuery("SELECT * FROM "+actualTable);	
 			
 			ResultSetMetaData rsMetaData = rs.getMetaData();
 
 		    int numberOfColumns = rsMetaData.getColumnCount();
 		    bf.write("\nCREATE TABLE "+actualTable.toLowerCase()+"(\n");
-		    bf.write(String.format("`%s_id` int(10) unsigned NOT NULL AUTO_INCREMENT,\n",actualTable.toLowerCase()));
+		    bf.write(String.format("`%s_id` int(11) unsigned NOT NULL AUTO_INCREMENT,\n",actualTable.toLowerCase()));
 			
 		    for (int i = 1; i <= numberOfColumns; i++) {
 		    	
@@ -197,10 +199,120 @@ public class Main {
 		    bf.write(") ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;");		    
 		    bf.write("\n");
 		}
-		bf.close();	
+		bf.close();
+		System.out.println("fim....");
 
 	}
 	
+	public static void moveData(ArrayList<String> tables)
+			throws SQLException, IOException {
+		
+		String campos;
+		String values;
+		BufferedWriter bf;
+		
+		ResultSet rs = null;
+		// Print the columns properties of the actual table
+		Statement st = connection.createStatement();
+		st = connection.createStatement();
+		for (String actualTable : tables) {
+			if (actualTable.toLowerCase().startsWith("ppr")){
+				continue;
+			}
+			
+			System.out.println(String.format("gerando sql da tabela \"%s\"",actualTable));
+			bf = new BufferedWriter(new FileWriter(String.format("c:\\temp\\movedata_%s.sql",actualTable)));
+			rs = st.executeQuery("SELECT * FROM "+actualTable);	
+			
+			ResultSetMetaData rsMetaData = rs.getMetaData();
+
+		    int numberOfColumns = rsMetaData.getColumnCount();
+		    campos = "";
+			
+		    ArrayList<String> listaCampos = new ArrayList<String>(); 
+		    
+		    for (int i = 1; i <= numberOfColumns; i++) {
+		    	listaCampos.add(rsMetaData.getColumnClassName(i));
+		    	campos += rsMetaData.getColumnName(i).toLowerCase()+",";
+		      }
+		      campos = campos.substring(0,campos.length()-1);
+		      
+		      bf.write(String.format("INSERT INTO %s (%s) VALUES ",actualTable.toLowerCase(), campos));
+		      
+		      while (rs.next()){
+		    	  values = "(";
+		    	  for (int i = 1; i <= numberOfColumns; i++) {
+		    		  
+		    		  //values+= String.format("[%s]",listaCampos.get(i-1));
+		    		  
+		    		  if (rs.getObject(i) != null) {
+		    			  
+		    			  if (listaCampos.get(i-1).equalsIgnoreCase("java.lang.integer") ||
+		    				 listaCampos.get(i-1).equalsIgnoreCase("java.math.bigdecimal") )
+		    			  {
+		    				  values+=(String.format("%d,", rs.getInt(i) ) );
+		    			  } else 
+			    		  if (listaCampos.get(i-1).equalsIgnoreCase("java.sql.timestamp") ){
+			    			  values+=(String.format("'%s',", rs.getTimestamp(i) ) );
+			    		  }
+		    			  else {
+		    				  values+=(String.format("'%s',", limparString( rs.getString(i) ) ) );
+		    			  }
+		    			  
+		    			  
+		    		  } else{
+		    			  values+=("NULL,");
+		    		  }
+		    		  //values+=(String.format("'%s',", new String(rs.getBytes(i), Charset.forName("Cp1252") ))  );
+		    		  //values+=(String.format("'%s',", new String(rs.getBytes(i), "Cp1252")) );
+		    		  
+		    		    
+		    	  }
+	    		  values=values.substring(0,values.length()-1)+")\n";  
+		    	  if (!rs.isLast()) {
+		    		  values+=",";  
+		    	  }
+		    	  bf.write(values);
+		      }
+		      
+		      bf.write(";\n");
+		      bf.close();
+
+		      //st.close();		    
+			
+			/*
+			rs = metadata.getColumns(null, null, actualTable, null);
+			
+			
+			System.out.println(actualTable.toUpperCase());
+			while (rs.next()) {
+				ResultSetMetaData rsMetaData = rs.getMetaData();
+				int numberOfColumns = rsMetaData.getColumnCount();
+				System.out.println(rs.getString("COLUMN_NAME") + ";"
+						+ rs.getString("TYPE_NAME") + ";"
+						//+ rs.getString("TYPE_SCHEM") + ";"
+						+rs.getInt("ORDINAL_POSITION")+";"
+						+ rs.getString("COLUMN_SIZE")+";"+
+						+ numberOfColumns);
+			}
+			*/
+
+		    //bf.write(String.format("PRIMARY KEY (`%s_id`)",actualTable.toLowerCase()));
+		    //bf.write(") ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;");		    
+		    //bf.write("\n");
+		}
+		
+		
+		System.out.println("fim....");
+
+	}
+	
+	private static String limparString(String entrada){
+		String saida = entrada.replace("'", "''");
+		saida = saida.replace("\\","\\\\");
+		return saida;
+	}
+
 	private static String traduzTipo(String nome, String tipo, Integer escala, Integer precisao, Integer idNullable){
 		String retorno = "";
 		
@@ -222,7 +334,7 @@ public class Main {
 			retorno = String.format("`%s` %s", nome,tipo);
 		}
 		
-		if (idNullable == 1){
+		if (idNullable == 0){
 			retorno += " NOT NULL,"; 
 		} else {
 			retorno += ",";
@@ -243,7 +355,13 @@ public class Main {
 			printGeneralMetadata();
 			// Print all the tables of the database scheme, with their names and
 			// structure
-			getColumnsMetadata(getTablesMetadata());
+			buildMetadata(getTablesMetadata());
+			//moveData(getTablesMetadata());
+			
+			ArrayList<String> a = new ArrayList<String>();
+			a.add("emp");
+			moveData(a);
+			
 		} catch (SQLException e) {
 			System.err
 					.println("There was an error retrieving the metadata properties: "
@@ -270,3 +388,28 @@ try {
  stmt.close();
 }
 */
+
+/*
+public void save(List<Entity> entities) throws SQLException {
+    try (
+        Connection connection = database.getConnection();
+        PreparedStatement statement = connection.prepareStatement(SQL_INSERT);
+    ) {
+        int i = 0;
+
+        for (Entity entity : entities) {
+            statement.setString(1, entity.getSomeProperty());
+            // ...
+
+            statement.addBatch();
+            i++;
+
+            if (i % 1000 == 0 || i == entities.size()) {
+                statement.executeBatch(); // Execute every 1000 items.
+            }
+        }
+    }
+} 
+  
+ */
+ 
