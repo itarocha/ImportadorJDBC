@@ -23,12 +23,12 @@ public class DBConnection {
 
 		Connection connection;
 		if (tipo.toLowerCase() == "mysql") { 
-			DB_URL = "jdbc:mysql://localhost:3306/sakila";
+			DB_URL = "jdbc:mysql://localhost:3306/newpetra";
 			DB_USER = "root";
 			DB_PASSWORD = "root";
 			connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
 		} else {
-			DB_URL = "jdbc:firebirdsql:localhost/3050:d:/database/soft.fdb";
+			DB_URL = "jdbc:firebirdsql:localhost/3050:d:/database/petra.fdb";
 			DB_USER = "SYSDBA";
 			DB_PASSWORD = "masterkey";
 			Properties props = new Properties();
